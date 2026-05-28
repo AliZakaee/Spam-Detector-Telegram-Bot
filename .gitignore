@@ -1,3 +1,9 @@
+# Generated model artifacts and collected data (produced by train.py / the bot)
+model.pkl
+vectorizer.pkl
+data.csv
+spam_messages.csv
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

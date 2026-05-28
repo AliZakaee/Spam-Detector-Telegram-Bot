@@ -6,11 +6,17 @@ numpy==2.3.3
 pandas==2.3.2
 pyTelegramBotAPI==4.29.1
 python-dateutil==2.9.0.post0
+python-dotenv==1.0.1
 pytz==2025.2
 requests==2.32.5
 scikit-learn==1.7.2
 scipy==1.16.2
-six==1.17.0
 threadpoolctl==3.6.0
 tzdata==2025.2
 urllib3==2.5.0
+
+# Optional: richer Persian normalization via hazm.
+# Not installed by default — hazm's gensim/nltk dependency tree conflicts with the pinned
+# numpy 2.x and has no build for Python >= 3.13. The bot/trainer automatically fall back to
+# an equivalent built-in normalizer when hazm is absent (see preprocessing.py). To enable it,
+# use a Python 3.8–3.11 environment with numpy < 2 and run:  pip install "hazm==0.10.0"
