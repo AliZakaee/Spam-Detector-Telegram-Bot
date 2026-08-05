@@ -12,6 +12,7 @@ from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup, ReactionTy
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BASE_DIR)
 from preprocessing import ACTIVE_BACKEND, normalize_text
+from core.data_file import count_labeled_messages
 
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
@@ -121,9 +122,7 @@ def send_data(message):
     if not os.path.exists(DATA_FILE) or os.path.getsize(DATA_FILE) == 0:
         bot.reply_to(message, "No spam messages found.")
         return
-    with open(DATA_FILE, 'r', encoding='utf-8') as file:
-        line_count = sum(1 for _ in file)
-    total_amount = max(line_count - 1, 0)  # exclude the header row
+    total_amount = count_labeled_messages(DATA_FILE)
     with open(DATA_FILE, 'rb') as f:
         bot.send_document(message.chat.id, f, caption=f"Spam message data with a total of *{total_amount}* entries.", parse_mode='Markdown')
 
