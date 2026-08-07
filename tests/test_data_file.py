@@ -28,6 +28,14 @@ class CountLabeledMessagesTests(unittest.TestCase):
 
         self.assertEqual(count_labeled_messages(path), 2)
 
+    def test_counts_legacy_headerless_records(self):
+        path = self.write_rows([
+            ["spam", "legacy first message"],
+            ["normal", "legacy second message"],
+        ])
+
+        self.assertEqual(count_labeled_messages(path), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
