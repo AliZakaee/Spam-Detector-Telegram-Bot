@@ -12,6 +12,7 @@ from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup, ReactionTy
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BASE_DIR)
 from preprocessing import ACTIVE_BACKEND, normalize_text
+from core.config import parse_spam_threshold
 from core.data_file import count_labeled_messages
 
 load_dotenv(os.path.join(BASE_DIR, ".env"))
@@ -22,10 +23,7 @@ LOGS_CHANNEL_ID = os.environ.get("LOGS_CHANNEL_ID")
 ADMINS_GROUP_ID = os.environ.get("ADMINS_GROUP_ID")
 AD_LINK = os.environ.get("AD_LINK", "https://t.me/ITheEqualizer")
 GROUP_USERNAME = os.environ.get("GROUP_USERNAME", "")  # used to build the admin "review message" deep-link
-try:
-    SPAM_THRESHOLD = float(os.environ.get("SPAM_THRESHOLD", "0.4"))
-except ValueError:
-    SPAM_THRESHOLD = 0.4
+SPAM_THRESHOLD = parse_spam_threshold(os.environ.get("SPAM_THRESHOLD"))
 
 _missing = [name for name in ("AUTH_TOKEN", "LOGS_CHANNEL_ID", "ADMINS_GROUP_ID") if not os.environ.get(name)]
 if _missing:
