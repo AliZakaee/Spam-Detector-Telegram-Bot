@@ -1,5 +1,4 @@
 import csv
-import logging
 import os
 import sys
 
@@ -14,6 +13,7 @@ sys.path.insert(0, BASE_DIR)
 from preprocessing import ACTIVE_BACKEND, normalize_text
 from core.config import parse_spam_threshold
 from core.data_file import count_labeled_messages
+from core.logging_config import configure_error_file_logging
 
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
@@ -36,13 +36,9 @@ LOG_PATH = os.path.join(BASE_DIR, "bot.log")
 
 bot = telebot.TeleBot(AUTH_TOKEN)
 
-# Keep console quiet (CRITICAL) but log everything to bot.log for later inspection.
+# Keep the console quiet below CRITICAL while preserving operational errors in bot.log.
 logger = telebot.logger
-logger.setLevel(logging.CRITICAL)
-file_handler = logging.FileHandler(LOG_PATH)
-file_handler.setLevel(logging.DEBUG)
-file_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
-logger.addHandler(file_handler)
+configure_error_file_logging(logger, LOG_PATH)
 
 try:
     model = joblib.load(MODEL_PATH)
