@@ -14,6 +14,7 @@ from preprocessing import ACTIVE_BACKEND, normalize_text
 from core.config import parse_spam_threshold
 from core.data_file import count_labeled_messages
 from core.logging_config import configure_error_file_logging
+from core.message_identity import get_username
 
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
@@ -80,12 +81,6 @@ def classify(text):
     spam_confidence = proba[SPAM_INDEX]
     label = model.classes_[proba.argmax()]
     return label, spam_confidence
-
-
-def get_username(message):
-    if message.from_user.username:
-        return '@' + message.from_user.username + ' ' + f'(`{message.from_user.id}`)'
-    return f'کاربر بدون نام کاربری با آیدی عددی `{message.from_user.id}`'
 
 
 # /detect labels a replied-to message as spam/normal and stores its text for the callback to save.
