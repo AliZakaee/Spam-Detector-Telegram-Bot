@@ -15,6 +15,7 @@ from core.config import parse_spam_threshold
 from core.data_file import count_labeled_messages
 from core.logging_config import configure_error_file_logging
 from core.message_identity import get_username
+from core.warning_message import dismiss_warning_message
 
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
@@ -220,6 +221,7 @@ def callback_handler(call):
     elif action == 'checked':
         try:
             bot.set_message_reaction(chat_id, msg_id, reaction=[ReactionTypeEmoji(emoji="👍")])
+            dismiss_warning_message(bot, warning_messages, chat_id, msg_id)
             bot.answer_callback_query(call.id, "پیام تایید شد.", show_alert=True)
         except Exception as exc:
             logger.error("Failed to confirm message %s/%s: %s", chat_id, msg_id, exc)
