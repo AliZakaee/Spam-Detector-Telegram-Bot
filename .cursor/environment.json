@@ -1,0 +1,4 @@
+{
+  "name": "Spam Detector Telegram Bot",
+  "install": "pip install -r requirements.txt"
+}
