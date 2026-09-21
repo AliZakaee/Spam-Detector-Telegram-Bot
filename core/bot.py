@@ -2,7 +2,6 @@ import csv
 import os
 import sys
 
-import joblib
 import telebot
 from dotenv import load_dotenv
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup, ReactionTypeEmoji
@@ -10,8 +9,10 @@ from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup, ReactionTy
 # Make the repo root importable so the shared normalizer is found regardless of CWD.
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BASE_DIR)
-from preprocessing import ACTIVE_BACKEND, normalize_text
-from core.config import parse_spam_threshold
+from preprocessing import ACTIVE_BACKEND
+from core.classification_text import format_admin_alert, format_check_reply, format_status
+from core.classifier import build_classifier
+from core.config import parse_classifier_backend, parse_confidence_floor, parse_spam_threshold
 from core.data_file import count_labeled_messages
 from core.logging_config import configure_error_file_logging
 from core.message_identity import get_username
@@ -26,6 +27,11 @@ ADMINS_GROUP_ID = os.environ.get("ADMINS_GROUP_ID")
 AD_LINK = os.environ.get("AD_LINK", "https://t.me/ITheEqualizer")
 GROUP_USERNAME = os.environ.get("GROUP_USERNAME", "")  # used to build the admin "review message" deep-link
 SPAM_THRESHOLD = parse_spam_threshold(os.environ.get("SPAM_THRESHOLD"))
+CONFIDENCE_FLOOR = parse_confidence_floor(os.environ.get("TYPESAFE_CONFIDENCE_FLOOR"))
+try:
+    CLASSIFIER_BACKEND = parse_classifier_backend(os.environ.get("CLASSIFIER_BACKEND"))
+except ValueError as exc:
+    raise SystemExit(str(exc)) from exc
 
 _missing = [name for name in ("AUTH_TOKEN", "LOGS_CHANNEL_ID", "ADMINS_GROUP_ID") if not os.environ.get(name)]
 if _missing:
@@ -42,19 +48,20 @@ bot = telebot.TeleBot(AUTH_TOKEN)
 logger = telebot.logger
 configure_error_file_logging(logger, LOG_PATH)
 
-try:
-    model = joblib.load(MODEL_PATH)
-    vectorizer = joblib.load(VECTORIZER_PATH)
-except (FileNotFoundError, OSError) as exc:
-    raise SystemExit(f"Could not load model/vectorizer ({exc}). Run 'python train/train.py' first.")
+classifier = build_classifier(
+    backend=CLASSIFIER_BACKEND,
+    model_path=MODEL_PATH,
+    vectorizer_path=VECTORIZER_PATH,
+    typesafe_api_key=os.environ.get("TYPESAFE_API_KEY"),
+    spam_threshold=SPAM_THRESHOLD,
+    confidence_floor=CONFIDENCE_FLOOR,
+    logger=logger,
+)
 
-# The bot reads the 'spam' class probability directly; cache its index once.
-try:
-    SPAM_INDEX = list(model.classes_).index("spam")
-except ValueError:
-    raise SystemExit("Loaded model has no 'spam' class. Retrain with a dataset that contains 'spam' labels.")
-
-print(f"Bot starting — normalization backend: {ACTIVE_BACKEND}, spam threshold: {SPAM_THRESHOLD}")
+print(
+    f"Bot starting — backend: {classifier.name}, "
+    f"normalization: {ACTIVE_BACKEND}, spam threshold: {SPAM_THRESHOLD}"
+)
 
 
 def is_admin(chat_id, user_id, sender_chat=None):
@@ -76,12 +83,8 @@ def admin_only(func):
 
 
 def classify(text):
-    """Return (label, spam_confidence) from a single predict_proba pass over normalized text."""
-    X_new = vectorizer.transform([normalize_text(text)])
-    proba = model.predict_proba(X_new)[0]
-    spam_confidence = proba[SPAM_INDEX]
-    label = model.classes_[proba.argmax()]
-    return label, spam_confidence
+    """Return a ClassificationResult from the configured SVM, TypeSafe, or hybrid backend."""
+    return classifier.classify(text)
 
 
 # /detect labels a replied-to message as spam/normal and stores its text for the callback to save.
@@ -123,11 +126,18 @@ def check_message(message):
     if not message.reply_to_message or not message.reply_to_message.text:
         bot.reply_to(message, "You need to reply to a text message to check it!")
         return
-    label, spam_confidence = classify(message.reply_to_message.text)
-    if label == 'spam':
-        bot.reply_to(message, f"پیام مورد نظر با احتمال *{spam_confidence*100:.2f}%* اسپم شناسایی شده است.", parse_mode='Markdown')
-    else:
-        bot.reply_to(message, "پیام مورد نظر اسپم شناسایی نشد.")
+    result = classify(message.reply_to_message.text)
+    bot.reply_to(message, format_check_reply(result), parse_mode='Markdown')
+
+
+@bot.message_handler(commands=["status"])
+@admin_only
+def status(message):
+    bot.reply_to(
+        message,
+        format_status(classifier, SPAM_THRESHOLD, CONFIDENCE_FLOOR, ACTIVE_BACKEND),
+        parse_mode="Markdown",
+    )
 
 
 # Every text message is classified; flagged ones warn the user and notify the admins group.
@@ -138,8 +148,8 @@ def handle_message(message):
     if not text:
         return
 
-    label, spam_confidence = classify(text)
-    if label == 'spam' and spam_confidence > SPAM_THRESHOLD:
+    result = classify(text)
+    if result.should_flag:
         username = get_username(message)
         markup = InlineKeyboardMarkup()
         markup.add(
@@ -148,7 +158,7 @@ def handle_message(message):
         )
 
         warning_messages[(message.chat.id, message.message_id)] = bot.reply_to(message, f"""
-پیام شما با احتمال **{spam_confidence*100:.2f}%** اسپم و تبلیغات شناسایی شده است و در انتظار تایید توسط ادمین است.
+پیام شما با احتمال **{result.spam_confidence*100:.2f}%** اسپم و تبلیغات شناسایی شده است و در انتظار تایید توسط ادمین است.
 
 در صورت تمایل به سفارش تبلیغات [اینجا]({AD_LINK}) کلیک کنید و یا از دکمه زیر همین پیام استفاده کنید.
 
@@ -161,7 +171,12 @@ def handle_message(message):
             admin_buttons.append(InlineKeyboardButton('بررسی پیام', url=f'https://t.me/{GROUP_USERNAME}/{message.message_id}'))
         admin_buttons.append(InlineKeyboardButton('اسپم نیست', callback_data=f'checked:{message.chat.id}:{message.message_id}'))
         admin_markup.add(*admin_buttons)
-        bot.send_message(ADMINS_GROUP_ID, f"یک پیام احتمالی اسپم با احتمال {spam_confidence*100:.2f}% از {username} شناسایی شده است و نیازمند تایید شماست.", parse_mode='Markdown', reply_markup=admin_markup)
+        bot.send_message(
+            ADMINS_GROUP_ID,
+            format_admin_alert(result, username),
+            parse_mode='Markdown',
+            reply_markup=admin_markup,
+        )
 
 
 @bot.callback_query_handler(func=lambda call: is_admin(call.message.chat.id, call.from_user.id, getattr(call, 'sender_chat', None)))
