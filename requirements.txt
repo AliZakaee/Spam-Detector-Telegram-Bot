@@ -15,6 +15,19 @@ threadpoolctl==3.6.0
 tzdata==2025.2
 urllib3==2.5.0
 
+# TypeSafe (Jev) — zero-training structured classifier used by CLASSIFIER_BACKEND=typesafe|hybrid|auto
+typesafe-sdk==0.7.0
+httpx2==2.13.0
+httpcore2==2.13.0
+h11==0.16.0
+anyio==4.15.1
+pydantic==2.13.5
+pydantic_core==2.46.5
+annotated-types==0.8.0
+tenacity==9.1.4
+typing-inspection==0.4.4
+typing_extensions==4.16.0
+
 # Optional: richer Persian normalization via hazm.
 # Not installed by default — hazm's gensim/nltk dependency tree conflicts with the pinned
 # numpy 2.x and has no build for Python >= 3.13. The bot/trainer automatically fall back to
